@@ -1,0 +1,5 @@
+Year,Coldpool_extent,Coldpool_NBS_extent,Opilio_LE30_extent_top25pct,Opilio_LE30_extent_top25pct_NBS,Opilio_31to60_extent_top25pct,Opilio_31to60_extent_top25pct_NBS,Opilio_61to90_extent_top25pct,Opilio_61to90_extent_top25pct_NBS,Opilio_91to120_extent_top25pct,Opilio_91to120_extent_top25pct_NBS,Opilio_immatfem_extent_top25pct,Opilio_immatfem_extent_top25pct_NBS,Opilio_matfem_extent_top25pct,Opilio_matfem_extent_top25pct_NBS
+2010,118696,35288,1203,1203,2807,2406,2807,401,2406,0,3208,2005,3609,2406
+2017,72581,20451,401,401,2406,2005,802,0,3208,0,1604,1604,2406,1604
+2018,9713,8109,1802,1802,3104,2703,2005,0,1203,0,1703,901,2005,0
+2019,25263,17243,401,401,2005,1604,2005,0,1604,0,2005,1604,2406,0
