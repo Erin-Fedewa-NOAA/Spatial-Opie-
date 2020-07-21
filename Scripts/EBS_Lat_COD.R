@@ -1,90 +1,74 @@
+
 #notes ----
-#Lat/Long COD's in EBS 1988-2019
-#.dbf files are output from GIS lat/long centroid calculations, weighted by CPUE 
+#Snow Crab Lat COD's in EBS 1988-2019 by size/sex category
 
 #Erin Fedewa
-#Last update 2/20/20
+#Last update 6/24/20
 
 #load----
 library(tidyverse)
-library(foreign)
+library(rsample)
 
 # data ----
 
-#Lat/Long COD Timeseries ----
+#Exclude corner stations
+corner <- list("QP2625","ON2625","HG2019","JI2120","IH1918",
+               "GF2221","HG1918","GF2019","ON2524","PO2726",
+               "IH2221","GF1918","JI2221","JI2019","JI1918",
+               "HG2221","QP2726","PO2423","IH2019","PO2625",
+               "QP2423","IH2120","PO2524","HG2120","GF2120",
+               "QP2524")
 
-#ImmFem
-dat <-read.dbf("./Data/Exported_shapefiles/EBS_immatfem_ge31.dbf")
+## EBS
+catch_ebs <- read_csv("./Data/ebs_opilio_haul_data.csv")
+head(catch_ebs)
 
-dat %>%
-  filter(SURVEY_YEA >= 1988) %>%
-  select(SURVEY_YEA, LAT, LON) %>%  
-  add_column(SizeSex = "FEMALE_IMM")->immfem
+# data mgmt ----
 
-#MatFem
-dat2 <-read.dbf("./Data/Exported_shapefiles/EBS_mature_females.dbf")
-
-dat2 %>%
-  filter(SURVEY_YEA >= 1988) %>%
-  select(SURVEY_YEA, LAT, LONG) %>%  
-  rename(LON = LONG) %>%
-  add_column(SizeSex = "FEMALE_MAT")-> matfem
-
-#Males 31-60
-dat3 <-read.dbf("./Data/Exported_shapefiles/ebs_males_31to60s.dbf")
-
-dat3 %>%
-  filter(SURVEY_YEA >= 1988) %>%
-  select(SURVEY_YEA, LAT, LONG) %>%  
-  rename(LON = LONG) %>%
-  add_column(SizeSex = "MALE_31TO60")-> male31_60
-
-#Males 61-90
-dat4 <-read.dbf("./Data/Exported_shapefiles/ebs_males_61to90s.dbf")
-
-dat4 %>%
-  filter(SURVEY_YEA >= 1988) %>%
-  select(SURVEY_YEA, LAT, LONG) %>%  
-  rename(LON = LONG) %>%
-  add_column(SizeSex = "MALE_61TO90")-> male61_90
-
-#Males 91 to 120
-dat5 <-read.dbf("./Data/Exported_shapefiles/ebs_males_91to120s.dbf")
-
-dat5 %>%
-  filter(SURVEY_YEA >= 1988) %>%
-  select(SURVEY_YEA, LAT, LONG) %>%  
-  rename(LON = LONG) %>%
-  add_column(SizeSex = "MALE_91TO120")-> male91_120
-
-#Total Population
-dat6 <-read.dbf("./Data/Exported_shapefiles/EBS_total_pop.dbf")
-
-dat6 %>%
-  filter(SURVEY_YEA >= 1988) %>%
-  select(SURVEY_YEA, LAT, LON) %>%  
-  add_column(SizeSex = "POP")-> pop
-
-#Merge all dataframes and save output 
-pop %>% 
-  bind_rows(male31_60, male61_90, male91_120, immfem, matfem) -> COD
-
-  write.csv(COD, file="./Output/Lat COD.csv") 
-#Latitude COD's were imported into Spatial_Env_bySize_Sex.csv for LME/GLS models 
-
-#Plot
-ggplot(COD, aes(SURVEY_YEA, LAT, group=factor(SizeSex), colour=factor(SizeSex))) +
-  geom_line() +
-  facet_wrap(~SizeSex)
+## crab data EBS
+catch_ebs %>%
+  filter(AKFIN_SURVEY_YEAR %in% c(1988:2019)) %>%
+  select(AKFIN_SURVEY_YEAR, CRUISE, GIS_STATION, WIDTH, SHELL_CONDITION, SEX, CLUTCH_SIZE,
+         SAMPLING_FACTOR, DISTANCE_FISHED, NET_WIDTH, MID_LATITUDE, MID_LONGITUDE,
+         HAUL_TYPE, PERFORMANCE) -> crab_ebs
+names(crab_ebs) <- c("year", "cruise", "Station", "cw", "sc", "sex", "clutch", 
+                     "sample_factor", "distance_fished", "net_width", "lat", "lon", 
+                     "haul_type", "performance")
 
 
+## compute cpue by size-sex group for each station
+crab_ebs %>% 
+  filter(haul_type != 17,
+         #performance == 0,
+         cw >= 0) %>%
+  mutate(size_sex = ifelse(sex == 1 & cw >= 31 & cw <= 60.9, "male31to60",
+                           ifelse(sex == 1 & cw >= 61 & cw <= 90.9, "male61to90",
+                                  ifelse(sex == 1 & cw >= 91 & cw <= 120.9, "male91to120",
+                                         ifelse(sex == 2 & clutch >= 1, "mature_female",
+                                                ifelse(sex == 2 & clutch == 0 & cw >= 31, "immature_female", NA))))),
+         area_swept = distance_fished * (net_width / 1000) * 0.29155335) %>%
+  group_by(year, Station, lat, lon, area_swept, size_sex) %>%
+  summarise(num_crab = round(sum(sample_factor))) %>%
+  filter(!is.na(area_swept)) %>%
+  pivot_wider(names_from = size_sex, values_from = num_crab) %>%
+  mutate(pop = sum(male31to60, male61to90, male91to120, immature_female, mature_female, na.rm = T)) %>%
+  pivot_longer(c(6:12), names_to = "size_sex", values_to = "num_crab") %>%
+  filter(size_sex != "NA") %>%
+  mutate(num_crab = replace_na(num_crab, 0),
+         cpue = num_crab / area_swept) %>%
+  ungroup() -> cpue_long
 
-
-
-
-
-
-
+#Compute EBS snow crab COD's by size/sex
+cpue_long %>%
+  filter(!(Station %in% corner)) %>% #exclude corner stations
+  group_by(Station, size_sex) %>%
+  filter(n() == 32) %>% #include only stations sampled every year in 32 year timeseries
+  ungroup() %>% 
+  group_by(year, size_sex) %>%
+  summarise(Lat_COD = weighted.mean(lat, w = cpue)) -> COD 
+    
+write.csv(COD, file="./Output/COD_output.csv")
+  
 
 
 

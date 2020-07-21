@@ -131,15 +131,22 @@ stratum_est_crab %>%
          median = spatstat::weighted.median(size, w = w),
          q90 = spatstat::weighted.quantile(size, w = w, probs = 0.90)) %>%
   ggplot()+
-  geom_violin(aes(x = factor(year), y = size, weight = w), adjust = 0.3, fill = "darkgray", color="NA")+
+  geom_violin(aes(x = factor(year), y = size, weight = w, fill = factor(sex)), 
+              color = "NA", adjust = 0.3) +
+  scale_fill_manual(values=c("#0072B2", "#E69F00")) +
   geom_boxplot(aes(x = factor(year), y = size, weight = w), width = 0.1, outlier.alpha = 0)+
   #geom_point(aes(x = factor(year), y = median), size = 3)+
   #geom_point(aes(x = factor(year), y = q90), shape = 4, size = 3)+
   labs(x = NULL, y = "Carapce Width (mm)")+
   facet_wrap(~sex, scales= "free", labeller = )+
-  theme(panel.grid = element_blank())+
-  theme(axis.text.x  = element_text(size=11), axis.title.x = element_blank()) +
-  theme(strip.text.x = element_text(size=11))+
+  theme_bw() +
+  theme(strip.background =element_rect(fill="grey40"))+
+  theme(strip.text = element_text(colour = 'white')) +
+  theme(panel.grid.major = element_line(colour = "grey85", size = 0.2)) +
+  theme(panel.grid.minor = element_blank(),legend.position = "none")+
+  theme(axis.text.x  = element_text(size=12), axis.title.x = element_blank()) +
+  theme(axis.text.y  = element_text(size=10)) +
+  theme(strip.text.x = element_text(size=14, face = "bold")) +
   ggsave("./Figs/violin_plot.png", width = 8, height = 6, units = "in")
 
 #Medians and Quantiles 

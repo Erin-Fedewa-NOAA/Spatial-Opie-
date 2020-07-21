@@ -1,7 +1,7 @@
 # notes ----
 # Time Series Figure 2 in Manuscript 
-# Tyler Jackson
-# Last Updated 2020-1-16
+#Temperature difference plot for Reviewer response
+# Last Updated 7/17/20
 
 # load ----
 
@@ -13,8 +13,7 @@ library(FNGr) # for tickr function from Ben Williams, would need to download pac
 x_axis <- tickr(data = tibble(yr = 1988:2019), yr, 5)
 
 # color palette
-cbpalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", 
-               "black")
+cbpalette <- c("#999999", "#F0E442", "#0072B2", "#009E73", "#D55E00", "black")
 # data ----
 
 # all time series
@@ -53,7 +52,7 @@ ts %>%
   geom_point()+
   geom_line()+
   geom_hline(aes(yintercept = mean(CP_EXTENT)), linetype = 2)+
-  labs(y = bquote('Cold Pool Areal Extent ('~nm^2~')'), x = "")+
+  labs(y = bquote('Cold Pool Spatial Extent ('~nmi~')'), x = "")+
   scale_x_continuous(breaks = x_axis$breaks, labels = x_axis$labels)+
   theme_bw()+
   theme(panel.grid = element_blank()) -> cpa
@@ -82,7 +81,7 @@ ts %>%
   geom_line()+
   geom_hline(aes(yintercept = mean_Pop), linetype = 2)+
   #scale_alpha_manual(values = c(1, 1, 1, 1, 1, 1))+
-  scale_alpha_manual(values = c(0.5, 0.5, 0.5, 0.5, 0.5, 1))+
+  scale_alpha_manual(values = c(0.7, 0.7, 0.7, 0.7, 0.7, 1))+
   scale_colour_manual(values = cbpalette)+
   scale_shape_manual(values = c(7:11, 16))+
   labs(y = expression(atop("Temperature of", "Occupancy "( degree~C))), x = "")+
@@ -100,10 +99,10 @@ ts %>%
   geom_point()+
   geom_line()+
   geom_hline(aes(yintercept = mean_Pop), linetype = 2)+
-  scale_alpha_manual(values = c(0.5, 0.5, 0.5, 0.5, 0.5, 1))+
+  scale_alpha_manual(values = c(0.7, 0.7, 0.7, 0.7, 0.7, 1))+
   scale_colour_manual(values = cbpalette)+
   scale_shape_manual(values = c(7:11, 16))+
-  labs(y = bquote('Snow Crab Areal Extent ('~nm^2~')'), x = "")+
+  labs(y = bquote('Snow Crab Spatial Extent ('~nmi~')'), x = "")+
   scale_x_continuous(breaks = x_axis$breaks, labels = x_axis$labels)+
   theme_bw()+
   theme(panel.grid = element_blank(),
@@ -118,7 +117,7 @@ ts %>%
   geom_point()+
   geom_line()+
   geom_hline(aes(yintercept = mean_Pop), linetype = 2)+
-  scale_alpha_manual(values = c(0.5, 0.5, 0.5, 0.5, 0.5, 1),
+  scale_alpha_manual(values = c(0.7, 0.7, 0.7, 0.7, 0.7, 1),
                      labels = c("Immature Females", "Mature Females", "Males 31 to 60 mm",
                                 "Males 61 to 90 mm", "Males 91 to 120 mm", "Population"))+
   scale_colour_manual(values = cbpalette, 
@@ -155,4 +154,36 @@ plot_grid(avg_bt, temp_occ,
 
 ## write plot
 ggsave(filename = "./Figs/all_timeseries.png", device = "png", width = 11.5, height = 7, 
+       dpi = 300) 
+
+
+#Mean difference plot for Reviewer 1 response: 
+ts %>% 
+  filter(SIZESEX != "POP") %>%
+  group_by(SIZESEX) %>%
+  mutate(center_OCC = jtools::center(TEMP_OCC)) %>% #mean-center temp of occupancy 
+  mutate(Diff = AVG_BT - TEMP_OCC) %>%
+  mutate(center_Diff = AVG_BT - center_OCC) %>%
+select(Year, SIZESEX, Diff, center_Diff)  %>%
+  ggplot(aes(x = Year, y = Diff, group = SIZESEX, 
+             shape = SIZESEX, color = SIZESEX))+
+  geom_point()+
+  geom_line()+
+  scale_colour_manual(values = cbpalette, 
+                      labels = c("Immature Females", "Mature Females", "Males 31 to 60 mm",
+                                 "Males 61 to 90 mm", "Males 91 to 120 mm"))+
+  scale_shape_manual(values = c(7:11),
+                     labels = c("Immature Females", "Mature Females", "Males 31 to 60 mm",
+                                "Males 61 to 90 mm", "Males 91 to 120 mm"))+
+  labs(y = expression("Temperature Difference " ( degree~C)), x = "")+
+  scale_x_continuous(breaks = x_axis$breaks, labels = x_axis$labels)+
+  theme_bw()+
+  theme(axis.text.x  = element_text(size=11)) +
+  theme(panel.grid = element_blank(),
+        legend.position = "bottom",
+        legend.text = element_text(size = 9.5),
+        legend.title = element_blank())
+
+## write plot
+ggsave(filename = "./Figs/temp_diff.png", device = "png", width = 8, height = 6, 
        dpi = 300) 

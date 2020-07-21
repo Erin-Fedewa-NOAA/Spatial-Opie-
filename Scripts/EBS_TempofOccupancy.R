@@ -1,19 +1,26 @@
 # notes ----
-
 #Calculate EBS snow crab temperatures of occupancy (CPUE weighted) from 1988-2019
 #Cross correlations between temp of occupancy and bottom temps across time series 
-# Two general questions:
+#Rolling correlations to measure relationship between temp of occupancy/bottom temps over time, 
+    #and to detent shifts in correlation over time
+# Three general questions:
   # 1) how have avg. bottom temperatures changed in the EBS?
   # 2) how have bottom temperatures where oplio occur in the EBS changed?
+  # 3) How has relationship b/w bottom temps and occupied temps changed over time? 
 
-#Mike Litzow, Tyler Jackson, Erin Fedewa
+#Mike Litzow, Erin Fedewa, Tyler Jackson
+
+# Last Updated 7/17/20
 
 # load ----
 library(tidyverse)
+library(tidyquant)
 library(stats)
 library(TSA)
 library(tseries)
 library(forecast)
+library(TTR)
+library(FNGr) # for tickr function from Ben Williams, would need to download package from GitHub
 
 # data ----
 
@@ -34,7 +41,7 @@ names(crab_ebs) <- c("year", "cruise", "Station", "cw", "sc", "sex", "clutch",
                      "haul_type", "performance")
 
 
-## compute cpue by size-sex group for each station
+## compute cpue by size-sex group for each station ----
 crab_ebs %>% 
   filter(haul_type != 17,
          #performance == 0,
@@ -65,7 +72,7 @@ cpue_long %>%
   left_join(dat2, by = c("Station" = "GIS_STATION", "year" = "SURVEY_YEAR")) -> dat3
 
                 
-#Temperature of Occupancy ----
+#Temperature of Occupancy Calculations ----
 dat3 %>%
   filter(year >= 1988) %>%
   group_by(Station, size_sex) %>%
@@ -80,10 +87,9 @@ dat3 %>%
 #Output to include in master sizesex CSV 
 write.csv(dat3, file="./Output/TempOcc_Output.csv")
 
-
 # Cross-correlation analyses ----
 
-# check for lags via cross-correlation
+# Functions to check for lags via cross-correlation
 f_ccf <- function(x){ccf(x = x$AVG_BT, y = x$TEMP_OCC)}
 f_max_acf <- function(x){max(x$acf)}
 f_find_lag <- function(x){
@@ -91,58 +97,36 @@ f_find_lag <- function(x){
   x$lag[row]
 }
 
+#Max correlations/lags 
 dat3  %>%
   nest(-size_sex) %>%
   mutate(ccf = purrr::map(data, f_ccf),
          max_cor = purrr::map_dbl(ccf, f_max_acf),
          lag = purrr::map_dbl(ccf, f_find_lag))
 
-#Accounting for autocorrelation in ccf's 
+#Accounting for autocorrelation in ccf's ----
 
 #Modified Chelton Method (run functions below first for cor.test.PP to work)
 #Pyper and Peterman recommendation: use eq. 1 without the weighting
   #function, with autocorrelations estimated over N/5 lags j using
   #eq. 7, and with critical value (2) using N* - 2 degrees of freedom
 
-#Fix this!!
-ff <- function(x){cor.test.PP(x = x$AVG_BT, y = x$TEMP_OCC)}
-f_coef <- function(x){(x$correlation)}
+dat3 %>%
+  group_by(size_sex) %>%
+  summarise(Corr = first(cor.test.PP(AVG_BT, TEMP_OCC)),
+            P_val = last(cor.test.PP(AVG_BT, TEMP_OCC)))
 
-dat3  %>%
-  nest(-size_sex) %>%
-  mutate(Chelton = purrr::map(data, ff),
-         max_cor = purrr::map_dbl(Chelton, f_coef))
+########################################################
 
-#Not sure how to extract correlation coeff using above method so yes, please cringe, 
-    #...I did it the very ugly way for now....
-immfem<-subset(dat3, size_sex=="immature_female")
-cor.test.PP(immfem$AVG_BT, immfem$TEMP_OCC) # r=.79
-
-mfem<-subset(dat3, size_sex=="mature_female")
-cor.test.PP(mfem$AVG_BT, mfem$TEMP_OCC) # r=.91
-
-m91<-subset(dat3, size_sex=="male91to120")
-cor.test.PP(m91$AVG_BT, m91$TEMP_OCC) # r=.90
-
-m61<-subset(dat3, size_sex=="male61to90")
-cor.test.PP(m61$AVG_BT, m61$TEMP_OCC) # r=.92
-
-m31<-subset(dat3, size_sex=="male31to60")
-cor.test.PP(m31$AVG_BT, m31$TEMP_OCC) # r=.87
-
-pop<-subset(dat3, size_sex=="pop")
-cor.test.PP(pop$AVG_BT, pop$TEMP_OCC) # r=.88
-
-
-# Required functions for cor.test.PP:
+# Required functions for cor.test.PP: ----
 
 N.effective <- function(mat) {
   # written by Franz Mueter   Last modified: 23 October 2000
   # function to compute effective sample size for pairwise correlations among
-  # autocorrelated variables.
+      # autocorrelated variables.
   # Based on Pyper & Peterman (1998). CJFAS 55:2127-2140.  Eq. (1)
-  # where summation was done over lag j = 1, ..., N/5  #
-  # mat a matrix of variables, one variable per column
+     # where summation was done over lag j = 1, ..., N/5  #
+      # mat a matrix of variables, one variable per column
   #
   # function to compute simple estimates of autocorrelation up to lag N/5:
   # (Eq. 7 in Pyper & Peterman)
@@ -198,6 +182,7 @@ cor.test.PP <- function(x, y) {
   c(correlation = r, P.value = p.value)
 }
 
+################################################
 
 #Plot 
 dat3 %>%
@@ -213,12 +198,55 @@ dat3 %>%
   theme(axis.text.x=element_text(size=11))+
   theme(axis.text.y=element_text(size=10)) +
   theme(legend.position = "bottom")
+  #so there seems that there might be buffering during 2014-2017 in smaller size
+    #classes, less so in 2018-2019....is this evident with rolling correlations? 
 
-# so there seems that there might be buffering during 2014-2017 in smaller size
-    #classes, less so in 2018-2019
+# 5-year rolling correlations b/w temps of occupancy and bottom temps ----
+f_roll <- function(x){runCor(x = x$AVG_BT, y = x$TEMP_OCC, n=5)}
 
+dat3 %>%
+  group_by(size_sex)%>%
+  nest() %>%
+  mutate(roll = map(data, f_roll)) %>%
+  unnest()  -> dat4
 
+#Plot rolling correlations---can also present as 5 panel plot with static r for each
 
+# set x axis labels
+x_axis <- tickr(data = tibble(yr = 1988:2019), yr, 5)
 
+# color palette
+cbpalette <- c("#999999", "#F0E442", "#0072B2", "#009E73", "#D55E00", "black")
 
-
+dat4 %>%
+  filter(size_sex != "pop") %>%
+  ggplot(aes(x = year, y = roll, group = size_sex, 
+             shape = size_sex, color = size_sex))+
+  geom_point()+
+  geom_line()+
+  scale_colour_manual(values = cbpalette, 
+                      labels = c("Immature Females", "Mature Females", "Males 31 to 60 mm",
+                                 "Males 61 to 90 mm", "Males 91 to 120 mm"))+
+  scale_shape_manual(values = c(7:11),
+                     labels = c("Immature Females", "Mature Females", "Males 31 to 60 mm",
+                                "Males 61 to 90 mm", "Males 91 to 120 mm"))+
+  labs(y = "Correlation Coefficient" , x = "",
+       shape = NULL, color = NULL, alpha = NULL)+
+  scale_x_continuous(breaks = x_axis$breaks, labels = x_axis$labels)+
+  theme_bw()+
+  theme(axis.text.x  = element_text(size=11)) +
+  theme(panel.grid = element_blank(),
+        legend.position = "bottom",
+        legend.text = element_text(size = 9.5))
+## write plot
+ggsave(filename = "./Figs/5yr_corr.png", device = "png", width = 8, height = 6, 
+       dpi = 300)
+  
+ #Linear models- are residuals autocorrelated, suggesting a temporal pattern not 
+    #being captured by rxn b/w bottom temp and temp occ? 
+dat3 %>%
+  filter(size_sex == "immature_female") ->fem
+ m1 <- lm(TEMP_OCC ~ AVG_BT, data=fem)
+  summary(m1)
+checkresiduals(m1)
+#Repeated for all size.sex classes- seems more like white noise? 

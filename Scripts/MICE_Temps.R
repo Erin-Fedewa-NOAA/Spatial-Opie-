@@ -55,7 +55,7 @@ pred <- t(apply(r,1, function(x) rank(1-abs(x))<=20))# T for the 20 strongest co
 diag(pred) <- FALSE # and of course, drop self-correlations - make the diagonal FALSE
 
 # specify m=100 imputations, save output 
-#### imp <- mice(data = temp_mat, method = "norm", m=100, predictorMatrix = pred)
+#### imp <- mice(data = temp_mat, method = "norm", m=100, predictorMatrix = pred) #Using Bayesian linear regression method
 #### saveRDS(imp, "./Output/station_bottom_temp_imputations.RDS")
 
 # read in saved imputations
@@ -111,7 +111,8 @@ temps_long %>%
 ts %>%
   filter(HAUL_TYPE == 3,
          PERFORMANCE >= 0,
-         SURVEY_YEAR >= 1988) %>%
+         SURVEY_YEAR >= 1988,
+         !(GIS_STATION %in% corner)) %>%
   mutate(GIS_STATION = gsub("-", "", GIS_STATION)) %>%
   select(SURVEY_YEAR, GIS_STATION, MID_LATITUDE) %>%
   right_join(temps_long, by = c("SURVEY_YEAR", "GIS_STATION")) %>%
